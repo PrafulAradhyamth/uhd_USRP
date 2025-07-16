@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/testuhd_ex1.dir/testuhd_ex1.cpp.o -o out/testuhd_ex1  -luhd 

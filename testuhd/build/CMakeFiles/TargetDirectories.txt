@@ -1,0 +1,3 @@
+/home/praful/cppuhd/testuhd/build/CMakeFiles/testuhd_ex1.dir
+/home/praful/cppuhd/testuhd/build/CMakeFiles/edit_cache.dir
+/home/praful/cppuhd/testuhd/build/CMakeFiles/rebuild_cache.dir
