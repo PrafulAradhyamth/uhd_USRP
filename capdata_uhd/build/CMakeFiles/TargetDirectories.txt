@@ -1,0 +1,3 @@
+/mnt/c/Users/prafu/cpp_projects/uhd_USRP/capdata_uhd/build/CMakeFiles/capture_save_data.dir
+/mnt/c/Users/prafu/cpp_projects/uhd_USRP/capdata_uhd/build/CMakeFiles/edit_cache.dir
+/mnt/c/Users/prafu/cpp_projects/uhd_USRP/capdata_uhd/build/CMakeFiles/rebuild_cache.dir
