@@ -1,174 +1,176 @@
 #include <uhd/usrp/multi_usrp.hpp>
-#include <uhd/stream.hpp>
+#include <uhd/utils/thread.hpp>
 #include <uhd/types/tune_request.hpp>
+#include <uhd/stream.hpp>
 #include <iostream>
 #include <fstream>
 #include <complex>
 #include <vector>
-#include <cmath>
 #include <thread>
 #include <chrono>
-#include <algorithm>
+#include <cmath>
 #include <fftw3.h>
+#include <numeric>
 
-using namespace std::chrono_literals;
 
-// Parameters
-const double sample_rate = 32e3;
-const double center_freq = 915e6;
-const size_t num_samples = 2048;
-const std::vector<double> tx_gains = {0, 5, 10, 15, 20};
+// ========================== SIGNAL GENERATION ===========================
 
-// ---------- DSP UTILITIES ----------
-
-// Generate simple BPSK waveform
-std::vector<std::complex<float>> generate_bpsk_waveform(size_t len) {
-    std::vector<std::complex<float>> waveform(len);
-    for (size_t i = 0; i < len; ++i) {
-        float val = (i % 2 == 0) ? 1.0f : -1.0f;
-        waveform[i] = std::complex<float>(val, 0.0f);
+std::vector<std::complex<float>> generate_barker_bpsk() {
+    int barker[] = {1, 1, 1, -1, -1, 1, 1, -1, 1, -1, 1, -1, 1};
+    std::vector<std::complex<float>> waveform;
+    for (int i = 0; i < 1000; ++i) {
+        for (int b : barker)
+            waveform.emplace_back((float)b, 0.0f);
     }
     return waveform;
 }
 
-// Compute average power
+// ========================== DSP UTILITIES ===========================
+
 double compute_power(const std::vector<std::complex<float>>& vec) {
     double power = 0.0;
-    for (const auto& s : vec) power += std::norm(s);
+    for (const auto& v : vec) power += std::norm(v);
     return power / vec.size();
 }
 
-// 1. Power Ratio Method
-double compute_power_ratio_snr(const std::vector<std::complex<float>>& signal,
-                               const std::vector<std::complex<float>>& noise) {
-    double signal_power = compute_power(signal);
-    double noise_power = compute_power(noise);
-    return 10.0 * std::log10(signal_power / noise_power);
+double compute_power_snr(const std::vector<std::complex<float>>& signal,
+                         const std::vector<std::complex<float>>& noise) {
+    return 10.0 * std::log10(compute_power(signal) / compute_power(noise));
 }
 
-// 2. FFT-based SNR Method
-double compute_fft_snr(const std::vector<std::complex<float>>& rx_signal) {
-    int N = rx_signal.size();
-    std::vector<double> power_spectrum(N);
-
+double compute_fft_snr(const std::vector<std::complex<float>>& signal) {
+    size_t N = signal.size();
     fftw_complex* in = reinterpret_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * N));
     fftw_complex* out = reinterpret_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex) * N));
     fftw_plan plan = fftw_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
 
-    for (int i = 0; i < N; i++) {
-        in[i][0] = rx_signal[i].real();
-        in[i][1] = rx_signal[i].imag();
+    for (size_t i = 0; i < N; ++i) {
+        in[i][0] = signal[i].real();
+        in[i][1] = signal[i].imag();
     }
 
     fftw_execute(plan);
 
-    for (int i = 0; i < N; i++) {
-        double re = out[i][0];
-        double im = out[i][1];
-        power_spectrum[i] = (re * re + im * im);
-    }
-
-    int band = N / 8;
-    double signal_power = 0.0, noise_power = 0.0;
-    for (int i = 0; i < N; i++) {
-        if (i >= N/2 - band && i <= N/2 + band) signal_power += power_spectrum[i];
-        else noise_power += power_spectrum[i];
-    }
+    std::vector<double> spectrum(N);
+    for (size_t i = 0; i < N; ++i)
+        spectrum[i] = std::pow(out[i][0], 2) + std::pow(out[i][1], 2);
 
     fftw_destroy_plan(plan);
     fftw_free(in);
     fftw_free(out);
 
+    int band = N / 8;
+    double signal_power = 0, noise_power = 0;
+    for (size_t i = 0; i < N; ++i) {
+        if (i > N/2 - band && i < N/2 + band)
+            signal_power += spectrum[i];
+        else
+            noise_power += spectrum[i];
+    }
     return 10.0 * std::log10(signal_power / noise_power);
 }
 
-// 3. Correlation-based SNR Method
-double compute_correlation_snr(const std::vector<std::complex<float>>& rx_signal,
-                               const std::vector<std::complex<float>>& known_signal) {
-    int N = rx_signal.size();
-    int M = known_signal.size();
+double compute_correlation_snr(const std::vector<std::complex<float>>& rx,
+                               const std::vector<std::complex<float>>& tx) {
+    int N = rx.size(), M = tx.size();
     std::vector<double> corr(N - M + 1);
-
     for (int i = 0; i <= N - M; ++i) {
-        std::complex<double> acc(0, 0);
-        for (int j = 0; j < M; ++j) {
-            acc += std::conj(known_signal[j]) * rx_signal[i + j];
-        }
-        corr[i] = std::norm(acc);
+        std::complex<float> sum(0, 0);
+        for (int j = 0; j < M; ++j)
+            sum += std::conj(tx[j]) * rx[i + j];
+        corr[i] = std::norm(sum);
     }
 
     double peak = *std::max_element(corr.begin(), corr.end());
-    double sidelobe_sum = 0.0;
-    for (double v : corr) sidelobe_sum += v;
-    sidelobe_sum -= peak;
-    double noise_power = sidelobe_sum / (corr.size() - 1);
-
-    return 10.0 * std::log10(peak / noise_power);
+    double avg_noise = (std::accumulate(corr.begin(), corr.end(), 0.0) - peak) / (corr.size() - 1);
+    return 10.0 * std::log10(peak / avg_noise);
 }
 
-// ---------- MAIN PROGRAM ----------
+// ========================== SAVE FUNCTION ===========================
+
+void save_waveform(const std::vector<std::complex<float>>& buffer, const std::string& fname) {
+    std::ofstream f(fname, std::ios::binary);
+    f.write(reinterpret_cast<const char*>(buffer.data()), buffer.size() * sizeof(std::complex<float>));
+}
+
+// ========================== MAIN ===========================
 
 int main() {
+    uhd::set_thread_priority_safe();
     auto usrp = uhd::usrp::multi_usrp::make("addr=192.168.0.112");
 
-    usrp->set_rx_rate(sample_rate);
-    usrp->set_tx_rate(sample_rate);
-    usrp->set_rx_freq(center_freq);
-    usrp->set_tx_freq(center_freq);
+    size_t chan = 0;
+    double rate = 10e6;
+    double freq = 2.45e9;
+    double tx_gain = 20;
+    double rx_gain = 20;
 
-    usrp->set_rx_gain(10);
-    usrp->set_tx_antenna("TX/RX");
-    usrp->set_rx_antenna("RX2");
+    usrp->set_tx_subdev_spec(uhd::usrp::subdev_spec_t("A:0"));
+    usrp->set_rx_subdev_spec(uhd::usrp::subdev_spec_t("A:0"));
 
-    std::vector<std::complex<float>> waveform = generate_bpsk_waveform(num_samples);
+    usrp->set_tx_rate(rate);
+    usrp->set_rx_rate(rate);
+    usrp->set_tx_freq(freq);
+    usrp->set_rx_freq(freq);
+    usrp->set_tx_gain(tx_gain);
+    usrp->set_rx_gain(rx_gain);
 
-    // Setup streams
-    uhd::stream_args_t stream_args("fc32");
-    auto rx_stream = usrp->get_rx_stream(stream_args);
-    auto tx_stream = usrp->get_tx_stream(stream_args);
+    std::cout << "USRP Configured: " << freq / 1e6 << " MHz @ " << rate / 1e6 << " Msps\n";
 
-    std::ofstream outfile("snr_calibration.csv");
-    outfile << "TX_Gain_dB,SNR_Power_dB,SNR_FFT_dB,SNR_Corr_dB\n";
+    // Generate waveform
+    auto tx_waveform = generate_barker_bpsk();
+    std::vector<std::complex<float>> rx_buffer(4096 * 10);
 
-    for (double tx_gain : tx_gains) {
-        std::cout << "\nTesting TX Gain: " << tx_gain << " dB" << std::endl;
-        usrp->set_tx_gain(tx_gain);
+    // Prepare TX
+    uhd::stream_args_t tx_args("fc32"); tx_args.channels = {chan};
+    auto tx_stream = usrp->get_tx_stream(tx_args);
+    uhd::tx_metadata_t tx_md;
+    tx_md.start_of_burst = true;
+    tx_md.end_of_burst = false;
+    tx_md.has_time_spec = false;
 
-        // Transmit waveform
-        uhd::tx_metadata_t md;
-        md.start_of_burst = true;
-        md.end_of_burst = true;
-        tx_stream->send(&waveform.front(), waveform.size(), md);
+    // Prepare RX
+    uhd::stream_args_t rx_args("fc32"); rx_args.channels = {chan};
+    auto rx_stream = usrp->get_rx_stream(rx_args);
+    uhd::rx_metadata_t rx_md;
+    uhd::stream_cmd_t stream_cmd(uhd::stream_cmd_t::STREAM_MODE_NUM_SAMPS_AND_DONE);
+    stream_cmd.num_samps = rx_buffer.size();
+    stream_cmd.stream_now = true;
+    rx_stream->issue_stream_cmd(stream_cmd);
 
-        std::this_thread::sleep_for(300ms);
+    // Wait for RX pipeline to warm up
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-        // Receive signal
-        std::vector<std::complex<float>> signal_buf(num_samples);
-        uhd::rx_metadata_t rx_md;
-        rx_stream->recv(&signal_buf.front(), signal_buf.size(), rx_md);
+    // Transmit waveform
+    size_t tx_sent = tx_stream->send(&tx_waveform.front(), tx_waveform.size(), tx_md);
+    tx_md.start_of_burst = false;
+    tx_md.end_of_burst = true;
+    tx_stream->send("", 0, tx_md);
 
-        // Transmit zeros (for noise)
-        std::vector<std::complex<float>> zeros(num_samples, {0.0f, 0.0f});
-        tx_stream->send(&zeros.front(), zeros.size(), md);
-        std::this_thread::sleep_for(300ms);
+    // Receive
+    size_t rx_received = rx_stream->recv(&rx_buffer.front(), rx_buffer.size(), rx_md, 3.0);
+    rx_buffer.resize(rx_received);
+    save_waveform(rx_buffer, "rx_waveform.bin");
 
-        // Receive noise
-        std::vector<std::complex<float>> noise_buf(num_samples);
-        rx_stream->recv(&noise_buf.front(), noise_buf.size(), rx_md);
+    std::cout << "TX sent: " << tx_sent << " | RX received: " << rx_received << " samples\n";
 
-        // Compute SNRs
-        double snr_power = compute_power_ratio_snr(signal_buf, noise_buf);
-        double snr_fft   = compute_fft_snr(signal_buf);
-        double snr_corr  = compute_correlation_snr(signal_buf, waveform);
+    // Dummy noise for method 1 — in real app, measure noise separately
+    std::vector<std::complex<float>> dummy_noise(rx_received, {0.01f, 0.01f});
 
-        // Log results
-        outfile << tx_gain << "," << snr_power << "," << snr_fft << "," << snr_corr << "\n";
-        std::cout << "SNR Power: " << snr_power << " dB, "
-                  << "FFT: " << snr_fft << " dB, "
-                  << "Corr: " << snr_corr << " dB" << std::endl;
-    }
+    // SNR Estimations
+    double snr_power = compute_power_snr(rx_buffer, dummy_noise);
+    double snr_fft   = compute_fft_snr(rx_buffer);
+    double snr_corr  = compute_correlation_snr(rx_buffer, tx_waveform);
 
-    outfile.close();
-    std::cout << "\n Calibration complete. Results saved to snr_calibration.csv\n";
+    std::cout << "\n=== Estimated SNRs ===\n";
+    std::cout << "Power Ratio Method : " << snr_power << " dB\n";
+    std::cout << "FFT-Based Method   : " << snr_fft   << " dB\n";
+    std::cout << "Correlation Method : " << snr_corr  << " dB\n";
+
+    std::ofstream fout("snr_log.csv");
+    fout << "SNR_Power,SNR_FFT,SNR_Corr\n";
+    fout << snr_power << "," << snr_fft << "," << snr_corr << "\n";
+    fout.close();
+
     return 0;
 }
