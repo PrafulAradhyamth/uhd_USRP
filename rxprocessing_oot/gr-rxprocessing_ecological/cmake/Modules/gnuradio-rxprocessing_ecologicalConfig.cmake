@@ -1,0 +1,32 @@
+find_package(PkgConfig)
+
+PKG_CHECK_MODULES(PC_GR_RXPROCESSING_ECOLOGICAL gnuradio-rxprocessing_ecological)
+
+FIND_PATH(
+    GR_RXPROCESSING_ECOLOGICAL_INCLUDE_DIRS
+    NAMES gnuradio/rxprocessing_ecological/api.h
+    HINTS $ENV{RXPROCESSING_ECOLOGICAL_DIR}/include
+        ${PC_RXPROCESSING_ECOLOGICAL_INCLUDEDIR}
+    PATHS ${CMAKE_INSTALL_PREFIX}/include
+          /usr/local/include
+          /usr/include
+)
+
+FIND_LIBRARY(
+    GR_RXPROCESSING_ECOLOGICAL_LIBRARIES
+    NAMES gnuradio-rxprocessing_ecological
+    HINTS $ENV{RXPROCESSING_ECOLOGICAL_DIR}/lib
+        ${PC_RXPROCESSING_ECOLOGICAL_LIBDIR}
+    PATHS ${CMAKE_INSTALL_PREFIX}/lib
+          ${CMAKE_INSTALL_PREFIX}/lib64
+          /usr/local/lib
+          /usr/local/lib64
+          /usr/lib
+          /usr/lib64
+          )
+
+include("${CMAKE_CURRENT_LIST_DIR}/gnuradio-rxprocessing_ecologicalTarget.cmake")
+
+INCLUDE(FindPackageHandleStandardArgs)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(GR_RXPROCESSING_ECOLOGICAL DEFAULT_MSG GR_RXPROCESSING_ECOLOGICAL_LIBRARIES GR_RXPROCESSING_ECOLOGICAL_INCLUDE_DIRS)
+MARK_AS_ADVANCED(GR_RXPROCESSING_ECOLOGICAL_LIBRARIES GR_RXPROCESSING_ECOLOGICAL_INCLUDE_DIRS)

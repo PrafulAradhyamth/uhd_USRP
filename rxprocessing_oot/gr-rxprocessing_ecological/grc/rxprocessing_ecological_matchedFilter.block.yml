@@ -1,0 +1,33 @@
+id: rxprocessing_ecological_matchedFilter
+label: Matched Filter
+category: '[rxprocessing_ecological]'
+
+templates:
+  imports: from gnuradio import rxprocessing_ecological
+  make: rxprocessing_ecological.matchedFilter(${taps}, ${threshold}, ${verbose})
+
+parameters:
+- id: taps
+  label: Filter Taps
+  dtype: float_vector
+  default: [1.0, -1.0, 1.0]  # Example default taps
+
+- id: threshold
+  label: Detection Threshold
+  dtype: float
+  default: 0.0
+
+- id: verbose
+  label: Verbose Mode
+  dtype: bool
+  default: false
+
+inputs:
+- label: In
+  dtype: float
+
+outputs:
+- label: Out
+  dtype: float
+
+file_format: 1
