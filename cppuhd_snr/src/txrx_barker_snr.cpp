@@ -66,8 +66,8 @@ int main() {
 
     double rate = 10e6;
     double freq = 2.45e9;
-    double tx_gain = 20;
-    double rx_gain = 20;
+    double tx_gain = 40;
+    double rx_gain = 40;
 
     usrp->set_tx_rate(rate);
     usrp->set_rx_rate(rate);

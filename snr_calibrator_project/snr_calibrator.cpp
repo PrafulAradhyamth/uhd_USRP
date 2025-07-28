@@ -102,8 +102,8 @@ int main() {
     size_t chan = 0;
     double rate = 10e6;
     double freq = 2.45e9;
-    double tx_gain = 20;
-    double rx_gain = 20;
+    double tx_gain = 40;
+    double rx_gain = 40;
 
     usrp->set_tx_subdev_spec(uhd::usrp::subdev_spec_t("A:0"));
     usrp->set_rx_subdev_spec(uhd::usrp::subdev_spec_t("A:0"));
