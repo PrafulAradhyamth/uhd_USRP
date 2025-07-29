@@ -8,4 +8,5 @@
 
 install(FILES
     rxprocessing_ecological_matchedFilter.block.yml
-    rxprocessing_ecological_pktdetect.block.yml DESTINATION share/gnuradio/grc/blocks)
+    rxprocessing_ecological_pktdetect.block.yml
+    rxprocessing_ecological_rrcpulseshaping.block.yml DESTINATION share/gnuradio/grc/blocks)

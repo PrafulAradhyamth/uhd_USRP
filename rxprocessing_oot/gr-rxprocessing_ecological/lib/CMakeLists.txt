@@ -11,7 +11,8 @@
 ########################################################################
 include(GrPlatform) #define LIB_SUFFIX
 
-list(APPEND rxprocessing_ecological_sources)
+list(APPEND rxprocessing_ecological_sources
+    rrcpulseshaping_impl.cc)
 
 set(rxprocessing_ecological_sources
     "${rxprocessing_ecological_sources}"

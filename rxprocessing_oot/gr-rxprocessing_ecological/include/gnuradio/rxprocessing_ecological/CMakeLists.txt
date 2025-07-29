@@ -9,4 +9,5 @@
 ########################################################################
 # Install public header files
 ########################################################################
-install(FILES api.h DESTINATION include/gnuradio/rxprocessing_ecological)
+install(FILES api.h
+    rrcpulseshaping.h DESTINATION include/gnuradio/rxprocessing_ecological)

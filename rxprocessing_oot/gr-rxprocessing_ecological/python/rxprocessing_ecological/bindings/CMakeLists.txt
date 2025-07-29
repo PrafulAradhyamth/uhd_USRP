@@ -24,7 +24,8 @@ include(GrPybind)
 # Python Bindings
 ########################################################################
 
-list(APPEND rxprocessing_ecological_python_files python_bindings.cc)
+list(APPEND rxprocessing_ecological_python_files
+    rrcpulseshaping_python.cc python_bindings.cc)
 
 gr_pybind_make_oot(rxprocessing_ecological ../../.. gr::rxprocessing_ecological "${rxprocessing_ecological_python_files}")
 
