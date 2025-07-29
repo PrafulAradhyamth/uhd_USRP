@@ -33,6 +33,47 @@ options:
     state: enabled
 
 blocks:
+- name: padding
+  id: variable
+  parameters:
+    comment: ''
+    value: '[0]*32'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [480, 16.0]
+    rotation: 0
+    state: enabled
+- name: preamble
+  id: variable
+  parameters:
+    comment: ''
+    value: '[1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1]*2'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [328, 16.0]
+    rotation: 0
+    state: enabled
+- name: rrc
+  id: variable_rrc_filter_taps
+  parameters:
+    alpha: '0.35'
+    comment: ''
+    gain: '1'
+    ntaps: sps
+    samp_rate: samp_rate
+    sym_rate: sps*upsample_factor
+    value: ''
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [792, 24.0]
+    rotation: 0
+    state: enabled
 - name: samp_rate
   id: variable
   parameters:
@@ -43,6 +84,30 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate: [184, 12]
+    rotation: 0
+    state: enabled
+- name: sps
+  id: variable
+  parameters:
+    comment: ''
+    value: '4'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [584, 16.0]
+    rotation: 0
+    state: enabled
+- name: upsample_factor
+  id: variable
+  parameters:
+    comment: ''
+    value: '16'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [664, 16.0]
     rotation: 0
     state: enabled
 - name: BPSK_modulator
@@ -57,7 +122,101 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [344, 232.0]
+    coordinate: [680, 296.0]
+    rotation: 0
+    state: enabled
+- name: blocks_stream_mux_0
+  id: blocks_stream_mux
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    lengths: (len(preamble), len(padding))
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_inputs: '2'
+    type: byte
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [320, 288.0]
+    rotation: 0
+    state: enabled
+- name: data_upsampler
+  id: upsampler
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    upsample_factor: upsample_factor
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [512, 288.0]
+    rotation: 0
+    state: enabled
+- name: interp_fir_filter_xxx_0
+  id: interp_fir_filter_xxx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    interp: sps*upsample_factor
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_delay: '0'
+    taps: rrc
+    type: ccc
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [864, 280.0]
+    rotation: 0
+    state: bypassed
+- name: padding_vector
+  id: blocks_vector_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    repeat: 'True'
+    tags: '[]'
+    type: byte
+    vector: padding
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [112, 336.0]
+    rotation: 0
+    state: enabled
+- name: preamble_vector
+  id: blocks_vector_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    repeat: 'True'
+    tags: '[]'
+    type: byte
+    vector: preamble
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [104, 208.0]
     rotation: 0
     state: enabled
 - name: qtgui_time_sink_x_0
@@ -115,7 +274,7 @@ blocks:
     marker9: '-1'
     name: '""'
     nconnections: '1'
-    size: '1024'
+    size: '10000'
     srate: samp_rate
     stemplot: 'False'
     style1: '1'
@@ -154,33 +313,17 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [512, 208.0]
-    rotation: 0
-    state: enabled
-- name: random_binary_source
-  id: analog_random_source_x
-  parameters:
-    affinity: ''
-    alias: ''
-    comment: ''
-    max: '2'
-    maxoutbuf: '0'
-    min: '0'
-    minoutbuf: '0'
-    num_samps: '1000'
-    repeat: 'True'
-    type: byte
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [128, 200.0]
+    coordinate: [1064, 272.0]
     rotation: 0
     state: enabled
 
 connections:
-- [BPSK_modulator, '0', qtgui_time_sink_x_0, '0']
-- [random_binary_source, '0', BPSK_modulator, '0']
+- [BPSK_modulator, '0', interp_fir_filter_xxx_0, '0']
+- [blocks_stream_mux_0, '0', data_upsampler, '0']
+- [data_upsampler, '0', BPSK_modulator, '0']
+- [interp_fir_filter_xxx_0, '0', qtgui_time_sink_x_0, '0']
+- [padding_vector, '0', blocks_stream_mux_0, '1']
+- [preamble_vector, '0', blocks_stream_mux_0, '0']
 
 metadata:
   file_format: 1

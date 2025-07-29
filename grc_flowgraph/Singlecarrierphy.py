@@ -16,15 +16,16 @@ sys.path.append(os.environ.get('GRC_HIER_PATH', os.path.expanduser('~/.grc_gnura
 
 from BPSK import BPSK  # grc-generated hier_block
 from gnuradio import blocks
-import numpy
-from gnuradio import gr
+from gnuradio import filter
 from gnuradio.filter import firdes
+from gnuradio import gr
 from gnuradio.fft import window
 import signal
 from PyQt5 import Qt
 from argparse import ArgumentParser
 from gnuradio.eng_arg import eng_float, intx
 from gnuradio import eng_notation
+from upsampler import upsampler  # grc-generated hier_block
 import sip
 
 
@@ -64,15 +65,19 @@ class Singlecarrierphy(gr.top_block, Qt.QWidget):
         ##################################################
         # Variables
         ##################################################
+        self.upsample_factor = upsample_factor = 16
+        self.sps = sps = 4
         self.samp_rate = samp_rate = 32000
+        self.rrc = rrc = firdes.root_raised_cosine(1, samp_rate,sps*upsample_factor, 0.35, sps)
+        self.preamble = preamble = [1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1]*2
+        self.padding = padding = [0]*32
 
         ##################################################
         # Blocks
         ##################################################
 
-        self.random_binary_source = blocks.vector_source_b(list(map(int, numpy.random.randint(0, 2, 1000))), True)
         self.qtgui_time_sink_x_0 = qtgui.time_sink_c(
-            1024, #size
+            10000, #size
             samp_rate, #samp_rate
             "", #name
             1, #number of inputs
@@ -122,14 +127,23 @@ class Singlecarrierphy(gr.top_block, Qt.QWidget):
 
         self._qtgui_time_sink_x_0_win = sip.wrapinstance(self.qtgui_time_sink_x_0.qwidget(), Qt.QWidget)
         self.top_layout.addWidget(self._qtgui_time_sink_x_0_win)
-        self.BPSK_0 = BPSK()
+        self.preamble_vector = blocks.vector_source_b(preamble, True, 1, [])
+        self.padding_vector = blocks.vector_source_b(padding, True, 1, [])
+        self.data_upsampler = upsampler(
+            upsample_factor=upsample_factor,
+        )
+        self.blocks_stream_mux_0 = blocks.stream_mux(gr.sizeof_char*1, (len(preamble), len(padding)))
+        self.BPSK_modulator = BPSK()
 
 
         ##################################################
         # Connections
         ##################################################
-        self.connect((self.BPSK_0, 0), (self.qtgui_time_sink_x_0, 0))
-        self.connect((self.random_binary_source, 0), (self.BPSK_0, 0))
+        self.connect((self.BPSK_modulator, 0), (self.qtgui_time_sink_x_0, 0))
+        self.connect((self.blocks_stream_mux_0, 0), (self.data_upsampler, 0))
+        self.connect((self.data_upsampler, 0), (self.BPSK_modulator, 0))
+        self.connect((self.padding_vector, 0), (self.blocks_stream_mux_0, 1))
+        self.connect((self.preamble_vector, 0), (self.blocks_stream_mux_0, 0))
 
 
     def closeEvent(self, event):
@@ -140,12 +154,49 @@ class Singlecarrierphy(gr.top_block, Qt.QWidget):
 
         event.accept()
 
+    def get_upsample_factor(self):
+        return self.upsample_factor
+
+    def set_upsample_factor(self, upsample_factor):
+        self.upsample_factor = upsample_factor
+        self.set_rrc(firdes.root_raised_cosine(1, self.samp_rate, self.sps*self.upsample_factor, 0.35, self.sps))
+        self.data_upsampler.set_upsample_factor(self.upsample_factor)
+
+    def get_sps(self):
+        return self.sps
+
+    def set_sps(self, sps):
+        self.sps = sps
+        self.set_rrc(firdes.root_raised_cosine(1, self.samp_rate, self.sps*self.upsample_factor, 0.35, self.sps))
+
     def get_samp_rate(self):
         return self.samp_rate
 
     def set_samp_rate(self, samp_rate):
         self.samp_rate = samp_rate
+        self.set_rrc(firdes.root_raised_cosine(1, self.samp_rate, self.sps*self.upsample_factor, 0.35, self.sps))
         self.qtgui_time_sink_x_0.set_samp_rate(self.samp_rate)
+
+    def get_rrc(self):
+        return self.rrc
+
+    def set_rrc(self, rrc):
+        self.rrc = rrc
+        self.interp_fir_filter_xxx_0.set_taps(self.rrc)
+
+    def get_preamble(self):
+        return self.preamble
+
+    def set_preamble(self, preamble):
+        self.preamble = preamble
+        self.preamble_vector.set_data(self.preamble, [])
+
+    def get_padding(self):
+        return self.padding
+
+    def set_padding(self, padding):
+        self.padding = padding
+        self.padding_vector.set_data(self.padding, [])
 
 
 
