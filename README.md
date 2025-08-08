@@ -1,5 +1,3 @@
-Absolutely! Below is a **README.md** template in Markdown format, synthesized from your full technical documentation for both **USRP X310 bricked recovery** and your **WLAN interference study workflow**. You can copy-paste this directly into your repository as a well-organized, detailed README.
-
 # USRP X310 Recovery & WLAN Interference Study
 
 This document outlines how to recover a "bricked" Ettus USRP X310 device and offers a detailed workflow for conducting WLAN interference experiments using MATLAB and USRP hardware.
